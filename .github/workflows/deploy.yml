@@ -55,23 +55,25 @@ jobs:
       - name: Install & restart on server
         shell: bash
         run: |
-          ssh -i id_ed25519 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "APP_DIR='${{ secrets.APP_DIR }}' bash -s" <<'EOF'
+          ssh -i id_ed25519 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "APP_DIR='${{ secrets.APP_DIR }}' bash -s" <<'EOF'
           set -euo pipefail
           cd "$APP_DIR"
       
-          # Instala deps y build en el servidor
+          # Asegurar PM2
+          if ! command -v pm2 >/dev/null 2>&1; then
+            npm i -g pm2
+          fi
+      
+          # Build en el VPS
           npm ci
           npm run build
       
-          # PM2: primera vez instala, luego reload
-          if pm2 ls >/dev/null 2>&1; then
-            pm2 startOrReload ecosystem.config.js --update-env || pm2 start "npm run start -- -p 3000" --name logiszar-erp
+          # Si ya existe, reload; si no, start
+          if pm2 describe logiszar-erp >/dev/null 2>&1; then
+            pm2 startOrReload ecosystem.config.js --update-env
           else
-            npm i -g pm2
             pm2 start "npm run start -- -p 3000" --name logiszar-erp
           fi
       
           pm2 save
-          EOF      
-
+          EOF
