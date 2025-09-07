@@ -25,17 +25,19 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
         run: npm run build
 
-      # ===== Clave SSH SIN base64 =====
-      - name: Prepare SSH key (no base64)
+      # ===== Preparar clave SSH (SIN base64) =====
+      - name: Prepare SSH key
+        shell: bash
         env:
-          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}   # tu clave privada completa (BEGIN/END)
         run: |
           umask 077
-          # Guardamos la clave en archivo
-          printf '%s' "$SSH_KEY" > id_ed25519
-          # Normalizamos fin de línea por si vino de Windows
+          # escribir la clave EXACTA desde el secreto
+          printf '%s\n' "$SSH_KEY" > id_ed25519
+          # por si el secreto tiene \r (Windows line endings)
           sed -i 's/\r$//' id_ed25519
-          chmod 600 id_ed25519
+          # validar que parsea
+          ssh-keygen -y -f id_ed25519 > /dev/null
 
       - name: Add host to known_hosts
         run: |
@@ -43,22 +45,33 @@ jobs:
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Upload project to server
+        shell: bash
         run: |
           rsync -az --delete \
-            -e "ssh -i id_ed25519" \
-            --exclude ".git" --exclude "node_modules" --exclude ".github" \
-            --exclude ".env*" \
+            --exclude ".git" --exclude "node_modules" --exclude ".github" --exclude ".env*" \
+            -e "ssh -i $PWD/id_ed25519 -o StrictHostKeyChecking=no" \
             ./  ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.APP_DIR }}/
 
       - name: Install & restart on server
-        run: |
-          ssh -i id_ed25519 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            set -euo pipefail
-            cd "${APP_DIR}"
-            npm ci
-            npm run build
-            pm2 startOrReload ecosystem.config.js --update-env
-            pm2 save
-          EOF
+        shell: bash
         env:
           APP_DIR: ${{ secrets.APP_DIR }}
+        run: |
+          ssh -i id_ed25519 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} <<'EOF'
+          set -euo pipefail
+          cd "$APP_DIR"
+
+          # Si no hay node_modules en el server, instala; si hay, usa ci igualmente
+          npm ci
+          npm run build
+
+          # Arranca/reload con PM2 (si es primera vez, hace start)
+          if pm2 ls >/dev/null 2>&1; then
+            pm2 startOrReload ecosystem.config.js --update-env || pm2 start "npm run start -- -p 3000" --name logiszar-erp
+          else
+            npm i -g pm2
+            pm2 start "npm run start -- -p 3000" --name logiszar-erp
+          fi
+
+          pm2 save
+          EOF
