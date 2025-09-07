@@ -1,0 +1,66 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+
+      # --- SSH prep: escribir la clave desde el secreto (BASE64) ---
+      - name: Prepare SSH key
+        env:
+          SSH_KEY_B64: ${{ secrets.SSH_KEY }}
+        run: |
+          echo "$SSH_KEY_B64" | base64 -d > id_ed25519
+          chmod 600 id_ed25519
+
+      # --- Confiar en el host del VPS ---
+      - name: Add host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      # --- Subir código (sin .git, node_modules, .github, .env*) ---
+      - name: Upload project to server
+        run: |
+          rsync -az --delete \
+            -e "ssh -i id_ed25519 -o StrictHostKeyChecking=no" \
+            --exclude ".git" \
+            --exclude "node_modules" \
+            --exclude ".github" \
+            --exclude ".env*" \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.APP_DIR }}/
+
+      # --- Instalar y reiniciar en el servidor con PM2 ---
+      - name: Install & restart on server
+        run: |
+          ssh -i id_ed25519 -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -lc '
+              set -euo pipefail
+              cd \"${{ secrets.APP_DIR }}\"
+              npm ci
+              npm run build
+              pm2 startOrReload ecosystem.config.js --update-env
+              pm2 save
+            '"
