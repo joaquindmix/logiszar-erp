@@ -1,4 +1,27 @@
+# Logiszar ERP
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Configuración del entorno
+
+1. Copia `.env.example` a `.env`:
+
+```bash
+cp .env.example .env
+```
+
+2. Completa las variables necesarias en el archivo `.env`:
+
+- `DATABASE_URL`: cadena de conexión de la base de datos.
+- `AFIP_CERT_PATH`: ruta al certificado `.crt` provisto por AFIP.
+- `AFIP_KEY_PATH`: ruta a la clave privada `.key` asociada al certificado.
+- `AFIP_CUIT`: CUIT de la empresa.
+- `AFIP_ENV`: entorno de AFIP (`test` o `prod`).
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`: configuración del servidor de correo.
+- `APP_BASE_URL`: URL base de la aplicación.
+- `FX_SOURCE`: fuente para obtener tipos de cambio.
+
+Las rutas de `AFIP_CERT_PATH` y `AFIP_KEY_PATH` deben apuntar a los archivos generados para el CUIT correspondiente.
 
 ## Getting Started
 
