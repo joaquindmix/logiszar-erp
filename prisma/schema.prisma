@@ -1,0 +1,153 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum PaymentMethod {
+  CASH
+  CHEQUE
+  TRANSFER
+}
+
+enum DocumentStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum ChequeStatus {
+  PENDING
+  CLEARED
+  BOUNCED
+}
+
+enum LedgerEntryType {
+  INVOICE
+  CREDIT_NOTE
+  DELIVERY_NOTE
+  PAYMENT
+  CHEQUE
+}
+
+model Customer {
+  id            Int             @id @default(autoincrement())
+  name          String
+  email         String?         @unique
+  phone         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  invoices      Invoice[]
+  creditNotes   CreditNote[]
+  deliveryNotes DeliveryNote[]
+  payments      Payment[]
+  cheques       Cheque[]
+  ledgerEntries CustomerLedger[]
+}
+
+model Product {
+  id           Int             @id @default(autoincrement())
+  name         String
+  sku          String?         @unique
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  priceItems   PriceListItem[]
+  invoiceItems InvoiceItem[]
+}
+
+model PriceList {
+  id        Int             @id @default(autoincrement())
+  name      String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  items     PriceListItem[]
+}
+
+model PriceListItem {
+  id          Int       @id @default(autoincrement())
+  price       Decimal   @db.Decimal(10, 2)
+  product     Product   @relation(fields: [productId], references: [id])
+  productId   Int
+  priceList   PriceList @relation(fields: [priceListId], references: [id])
+  priceListId Int
+}
+
+model Invoice {
+  id          Int          @id @default(autoincrement())
+  number      String       @unique
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  customerId  Int
+  date        DateTime     @default(now())
+  status      DocumentStatus
+  items       InvoiceItem[]
+  payments    Payment[]
+  total       Decimal      @db.Decimal(10, 2)
+  creditNotes CreditNote[]
+}
+
+model InvoiceItem {
+  id        Int     @id @default(autoincrement())
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+  invoiceId Int
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+  quantity  Int
+  price     Decimal @db.Decimal(10, 2)
+}
+
+model CreditNote {
+  id         Int           @id @default(autoincrement())
+  number     String        @unique
+  customer   Customer      @relation(fields: [customerId], references: [id])
+  customerId Int
+  invoice    Invoice?      @relation(fields: [invoiceId], references: [id])
+  invoiceId  Int?
+  date       DateTime      @default(now())
+  status     DocumentStatus
+  amount     Decimal       @db.Decimal(10, 2)
+}
+
+model DeliveryNote {
+  id         Int           @id @default(autoincrement())
+  number     String        @unique
+  customer   Customer      @relation(fields: [customerId], references: [id])
+  customerId Int
+  date       DateTime      @default(now())
+  status     DocumentStatus
+}
+
+model Payment {
+  id         Int           @id @default(autoincrement())
+  customer   Customer      @relation(fields: [customerId], references: [id])
+  customerId Int
+  invoice    Invoice?      @relation(fields: [invoiceId], references: [id])
+  invoiceId  Int?
+  method     PaymentMethod
+  amount     Decimal       @db.Decimal(10, 2)
+  date       DateTime      @default(now())
+  cheque     Cheque?
+  status     DocumentStatus
+}
+
+model Cheque {
+  id        Int      @id @default(autoincrement())
+  number    String   @unique
+  bank      String
+  dueDate   DateTime
+  status    ChequeStatus
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+  paymentId Int      @unique
+}
+
+model CustomerLedger {
+  id         Int            @id @default(autoincrement())
+  customer   Customer       @relation(fields: [customerId], references: [id])
+  customerId Int
+  entryType  LedgerEntryType
+  reference  String?
+  amount     Decimal        @db.Decimal(10, 2)
+  date       DateTime       @default(now())
+}
